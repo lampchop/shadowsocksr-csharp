@@ -185,7 +185,7 @@ namespace Shadowsocks.View
             string text = (enabled ?
                     I18N.GetString("System Proxy On: ") + (global ? I18N.GetString("Global") : I18N.GetString("PAC")) :
                     String.Format(I18N.GetString("Running: Port {0}"), config.localPort))  // this feedback is very important because they need to know Shadowsocks is running
-                + "\n" + config.GetCurrentServer(null).FriendlyName();
+                    ;
             _notifyIcon.Text = text.Substring(0, Math.Min(63, text.Length));
         }
 
@@ -203,11 +203,11 @@ namespace Shadowsocks.View
         {
             this.contextMenu1 = new ContextMenu(new MenuItem[] {
                 modeItem = CreateMenuGroup("Mode", new MenuItem[] {
-                    noModifyItem = CreateMenuItem("No modify system proxy", new EventHandler(this.NoModifyItem_Click)),
-                    new MenuItem("-"),
                     enableItem = CreateMenuItem("Disable system proxy", new EventHandler(this.EnableItem_Click)),
                     PACModeItem = CreateMenuItem("PAC", new EventHandler(this.PACModeItem_Click)),
-                    globalModeItem = CreateMenuItem("Global", new EventHandler(this.GlobalModeItem_Click))
+                    globalModeItem = CreateMenuItem("Global", new EventHandler(this.GlobalModeItem_Click)),
+                    new MenuItem("-"),
+                    noModifyItem = CreateMenuItem("No modify system proxy", new EventHandler(this.NoModifyItem_Click))
                 }),
                 CreateMenuGroup("PAC ", new MenuItem[] {
                     CreateMenuItem("Update local PAC from Lan IP list", new EventHandler(this.UpdatePACFromLanIPListItem_Click)),
@@ -253,8 +253,8 @@ namespace Shadowsocks.View
                     CreateMenuItem("Check update", new EventHandler(this.CheckUpdate_Click)),
                     CreateMenuItem("Show logs...", new EventHandler(this.ShowLogItem_Click)),
                     CreateMenuItem("Open wiki...", new EventHandler(this.OpenWiki_Click)),
-                    new MenuItem("-"),
                     CreateMenuItem("Feedback...", new EventHandler(this.FeedbackItem_Click)),
+                    new MenuItem("-"),
                     CreateMenuItem("Gen custom QRCode...", new EventHandler(this.showURLFromQRCode)),
                     CreateMenuItem("Reset password...", new EventHandler(this.ResetPasswordItem_Click)),
                     new MenuItem("-"),
@@ -322,7 +322,7 @@ namespace Shadowsocks.View
 
         void updateChecker_NewVersionFound(object sender, EventArgs e)
         {
-            if (updateChecker.LatestVersionNumber == null || updateChecker.LatestVersionNumber.Length == 0)
+            if (string.IsNullOrEmpty(updateChecker.LatestVersionNumber))
             {
                 Logging.Log(LogLevel.Error, "connect to update server error");
             }
@@ -380,7 +380,7 @@ namespace Shadowsocks.View
 
             SelectRandomItem.Checked = config.random;
             sameHostForSameTargetItem.Checked = config.sameHostForSameTarget;
-            //httpWhiteListItem.Checked = config.bypassWhiteList;
+            httpWhiteListItem.Checked = config.bypassWhiteList;
         }
 
         private void UpdateServersMenu()
@@ -399,7 +399,7 @@ namespace Shadowsocks.View
             {
                 string group_name;
                 Server server = configuration.configs[i];
-                if (server.group == null || server.group.Length == 0)
+                if (string.IsNullOrEmpty(server.group))
                     group_name = def_group;
                 else
                     group_name = server.group;
@@ -449,6 +449,11 @@ namespace Shadowsocks.View
             if (configForm != null)
             {
                 configForm.Activate();
+                if (addNode)
+                {
+                    Configuration cfg = controller.GetConfiguration();
+                    configForm.SetServerListSelectedIndex(cfg.index + 1);
+                }
             }
             else
             {
@@ -861,7 +866,7 @@ namespace Shadowsocks.View
             int ss_index = text.IndexOf("ss://", 1, StringComparison.OrdinalIgnoreCase);
             int ssr_index = text.IndexOf("ssr://", 1, StringComparison.OrdinalIgnoreCase);
             int index = ss_index;
-            if (index == -1 || index > ssr_index) index = ssr_index;
+            if (index == -1 || index > ssr_index && ssr_index != -1) index = ssr_index;
             if (index == -1)
             {
                 out_urls.Insert(0, text);

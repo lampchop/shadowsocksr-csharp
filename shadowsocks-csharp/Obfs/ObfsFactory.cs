@@ -25,37 +25,29 @@ namespace Shadowsocks.Obfs
             {
                 _registeredObfs.Add(method, typeof(TlsTicketAuthObfs));
             }
-            foreach (string method in VerifySimpleObfs.SupportedObfs())
-            {
-                _registeredObfs.Add(method, typeof(VerifySimpleObfs));
-            }
             foreach (string method in VerifyDeflateObfs.SupportedObfs())
             {
                 _registeredObfs.Add(method, typeof(VerifyDeflateObfs));
             }
-            foreach (string method in VerifySHA1Obfs.SupportedObfs())
-            {
-                _registeredObfs.Add(method, typeof(VerifySHA1Obfs));
-            }
-            foreach (string method in AuthSHA1.SupportedObfs())
-            {
-                _registeredObfs.Add(method, typeof(AuthSHA1));
-            }
-            foreach (string method in AuthSHA1V2.SupportedObfs())
-            {
-                _registeredObfs.Add(method, typeof(AuthSHA1V2));
-            }
+            //foreach (string method in AuthSHA1.SupportedObfs())
+            //{
+            //    _registeredObfs.Add(method, typeof(AuthSHA1));
+            //}
+            //foreach (string method in AuthSHA1V2.SupportedObfs())
+            //{
+            //    _registeredObfs.Add(method, typeof(AuthSHA1V2));
+            //}
             foreach (string method in AuthSHA1V4.SupportedObfs())
             {
                 _registeredObfs.Add(method, typeof(AuthSHA1V4));
             }
-            foreach (string method in AuthAES128.SupportedObfs())
-            {
-                _registeredObfs.Add(method, typeof(AuthAES128));
-            }
             foreach (string method in AuthAES128SHA1.SupportedObfs())
             {
                 _registeredObfs.Add(method, typeof(AuthAES128SHA1));
+            }
+            foreach (string method in AuthChain_a.SupportedObfs())
+            {
+                _registeredObfs.Add(method, typeof(AuthChain_a));
             }
         }
 

@@ -27,7 +27,7 @@ namespace Shadowsocks.Controller
         protected string _proxy_server;
         protected int _proxy_udp_port;
 
-        protected const int RecvSize = 2048;
+        protected const int RecvSize = 1460 * 2;
 
         private byte[] SendEncryptBuffer = new byte[RecvSize];
         private byte[] ReceiveDecryptBuffer = new byte[RecvSize * 2];
@@ -77,6 +77,14 @@ namespace Shadowsocks.Controller
             }
         }
 
+        public int Available
+        {
+            get
+            {
+                return _socket.Available;
+            }
+        }
+
         public void Shutdown(SocketShutdown how)
         {
             _socket.Shutdown(how);
@@ -85,6 +93,10 @@ namespace Shadowsocks.Controller
         public void Close()
         {
             _socket.Close();
+            _socket = null;
+
+            SendEncryptBuffer = null;
+            ReceiveDecryptBuffer = null;
         }
 
         public IAsyncResult BeginConnect(EndPoint ep, AsyncCallback callback, object state)
@@ -129,10 +141,20 @@ namespace Shadowsocks.Controller
             return bytesRead;
         }
 
+        public int SendAll(byte[] buffer, int size, SocketFlags flags)
+        {
+            int sendSize = _socket.Send(buffer, size, 0);
+            while (sendSize < size)
+            {
+                int new_size = _socket.Send(buffer, sendSize, size - sendSize, 0);
+                sendSize += new_size;
+            }
+            return size;
+        }
+
         public virtual int Send(byte[] buffer, int size, SocketFlags flags)
         {
-            _socket.Send(buffer, size, 0);
-            return size;
+            return SendAll(buffer, size, 0);
         }
 
         public int BeginSend(byte[] buffer, int size, SocketFlags flags, AsyncCallback callback, object state)
@@ -179,12 +201,12 @@ namespace Shadowsocks.Controller
             //构造Socks5代理服务器第一连接头(无用户名密码)
             byte[] bySock5Send = new Byte[10];
             bySock5Send[0] = 5;
-            bySock5Send[1] = 2;
+            bySock5Send[1] = (socks5RemoteUsername.Length == 0 ? (byte)1 : (byte)2);
             bySock5Send[2] = 0;
             bySock5Send[3] = 2;
 
             //发送Socks5代理第一次连接信息
-            _socket.Send(bySock5Send, 4, SocketFlags.None);
+            _socket.Send(bySock5Send, bySock5Send[1] + 2, SocketFlags.None);
 
             byte[] bySock5Receive = new byte[32];
             int iRecCount = _socket.Receive(bySock5Receive, bySock5Receive.Length, SocketFlags.None);
@@ -192,13 +214,11 @@ namespace Shadowsocks.Controller
             if (iRecCount < 2)
             {
                 throw new SocketException(socketErrorCode);
-                //throw new Exception("不能获得代理服务器正确响应。");
             }
 
             if (bySock5Receive[0] != 5 || (bySock5Receive[1] != 0 && bySock5Receive[1] != 2))
             {
                 throw new SocketException(socketErrorCode);
-                //throw new Exception("代理服务其返回的响应错误。");
             }
 
             if (bySock5Receive[1] != 0) // auth
@@ -208,7 +228,6 @@ namespace Shadowsocks.Controller
                     if (socks5RemoteUsername.Length == 0)
                     {
                         throw new SocketException(socketErrorCode);
-                        //throw new Exception("代理服务器需要进行身份确认。");
                     }
                     else
                     {
@@ -425,7 +444,7 @@ namespace Shadowsocks.Controller
             string authstr = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(socks5RemoteUsername + ":" + socks5RemotePassword));
             string cmd = "CONNECT " + host + " HTTP/1.0\r\n"
                 + "Host: " + host + "\r\n";
-            if (proxyUserAgent != null && proxyUserAgent.Length > 0)
+            if (!string.IsNullOrEmpty(proxyUserAgent))
                 cmd += "User-Agent: " + proxyUserAgent + "\r\n";
             cmd += "Proxy-Connection: Keep-Alive\r\n";
             if (socks5RemoteUsername.Length > 0)
@@ -491,8 +510,7 @@ namespace Shadowsocks.Controller
                 }
                 local_sendback_protocol = null;
             }
-            _socket.Send(buffer, size, 0);
-            return size;
+            return SendAll(buffer, size, 0);
         }
 
     }
@@ -516,8 +534,12 @@ namespace Shadowsocks.Controller
         protected int _proxy_udp_port;
 
         //private bool header_sent = false;
-
-        protected const int RecvSize = 2048;
+        public const int MTU = 1492;
+        public const int MSS = MTU - 40;
+        protected const int RecvSize = MSS * 4;
+        public int TcpMSS = MSS;
+        public int RecvBufferSize;
+        public int OverHead;
 
         private byte[] SendEncryptBuffer = new byte[RecvSize];
         private byte[] ReceiveDecryptBuffer = new byte[RecvSize * 2];
@@ -586,6 +608,14 @@ namespace Shadowsocks.Controller
             }
         }
 
+        public int Available
+        {
+            get
+            {
+                return _socket.Available;
+            }
+        }
+
         public void Shutdown(SocketShutdown how)
         {
             _socket.Shutdown(how);
@@ -611,9 +641,16 @@ namespace Shadowsocks.Controller
                 lock (_decryptionLock)
                 {
                     if (_encryptor != null)
+                    {
                         ((IDisposable)_encryptor).Dispose();
+                        _encryptor = null;
+                    }
                 }
             }
+
+            _socket = null;
+            SendEncryptBuffer = null;
+            ReceiveDecryptBuffer = null;
         }
 
         public IAsyncResult BeginConnect(EndPoint ep, AsyncCallback callback, object state)
@@ -658,14 +695,16 @@ namespace Shadowsocks.Controller
                     server.setObfsData(_obfs.InitData());
                 }
             }
-            int mss = 1460;
+            int mss = MSS;
             string server_addr = server.server;
+            OverHead = _protocol.GetOverhead() + _obfs.GetOverhead();
+            RecvBufferSize = RecvSize - OverHead;
             if (_proxy_server != null)
                 server_addr = _proxy_server;
             _protocol.SetServerInfo(new ServerInfo(server_addr, server.server_port, server.protocolparam??"", server.getProtocolData(),
-                _encryptor.getIV(), _password, _encryptor.getKey(), head_len, mss));
+                _encryptor.getIV(), _password, _encryptor.getKey(), head_len, mss, OverHead, RecvBufferSize));
             _obfs.SetServerInfo(new ServerInfo(server_addr, server.server_port, server.obfsparam??"", server.getObfsData(),
-                _encryptor.getIV(), _password, _encryptor.getKey(), head_len, mss));
+                _encryptor.getIV(), _password, _encryptor.getKey(), head_len, mss, OverHead, RecvBufferSize));
         }
 
         public int Receive(byte[] recv_buffer, int size, SocketFlags flags, out int bytesRead, out int protocolSize, out bool sendback)
@@ -686,6 +725,7 @@ namespace Shadowsocks.Controller
                         int outlength;
                         protocolSize = bytesToSend;
                         byte[] buffer = _protocol.ClientPostDecrypt(ReceiveDecryptBuffer, bytesToSend, out outlength);
+                        TcpMSS = _protocol.GetTcpMSS();
                         //if (recv_buffer.Length < outlength) //ASSERT
                         Array.Copy(buffer, 0, recv_buffer, 0, outlength);
                         return outlength;
@@ -731,6 +771,7 @@ namespace Shadowsocks.Controller
                         int outlength;
                         st.protocol_size = bytesToSend;
                         byte[] buffer = _protocol.ClientPostDecrypt(ReceiveDecryptBuffer, bytesToSend, out outlength);
+                        TcpMSS = _protocol.GetTcpMSS();
                         if (st.buffer.Length < outlength)
                         {
                             Array.Resize(ref st.buffer, outlength);
@@ -747,12 +788,21 @@ namespace Shadowsocks.Controller
             }
             return bytesRead;
         }
+        public int SendAll(byte[] buffer, int size, SocketFlags flags)
+        {
+            int sendSize = _socket.Send(buffer, size, 0);
+            while (sendSize < size)
+            {
+                int new_size = _socket.Send(buffer, sendSize, size - sendSize, 0);
+                sendSize += new_size;
+            }
+            return size;
+        }
 
         public int Send(byte[] buffer, int size, SocketFlags flags)
         {
             int bytesToSend = 0;
             int obfsSendSize;
-            int sendSize;
             byte[] obfsBuffer;
 
             lock (_encryptionLock)
@@ -771,43 +821,13 @@ namespace Shadowsocks.Controller
                 //    }
                 //}
                 byte[] bytesToEncrypt = _protocol.ClientPreEncrypt(buffer, size, out outlength);
+                if (bytesToEncrypt == null)
+                    return 0;
                 Util.Utils.SetArrayMinSize(ref SendEncryptBuffer, outlength + 32);
                 _encryptor.Encrypt(bytesToEncrypt, outlength, SendEncryptBuffer, out bytesToSend);
                 obfsBuffer = _obfs.ClientEncode(SendEncryptBuffer, bytesToSend, out obfsSendSize);
-                sendSize = _socket.Send(obfsBuffer, obfsSendSize, 0);
             }
-            while (sendSize < obfsSendSize)
-            {
-                int new_size = _socket.Send(obfsBuffer, sendSize, obfsSendSize - sendSize, 0);
-                sendSize += new_size;
-            }
-            return obfsSendSize;
-        }
-
-        public int BeginSend(byte[] buffer, int size, SocketFlags flags, AsyncCallback callback, object state)
-        {
-            CallbackState st = new CallbackState();
-            st.size = size;
-            st.state = state;
-
-            int bytesToSend = 0;
-            int obfsSendSize;
-            byte[] obfsBuffer;
-            lock (_encryptionLock)
-            {
-                int outlength;
-                byte[] bytesToEncrypt = _protocol.ClientPreEncrypt(buffer, size, out outlength);
-                Util.Utils.SetArrayMinSize(ref SendEncryptBuffer, outlength + 32);
-                _encryptor.Encrypt(bytesToEncrypt, outlength, SendEncryptBuffer, out bytesToSend);
-                obfsBuffer = _obfs.ClientEncode(SendEncryptBuffer, bytesToSend, out obfsSendSize);
-                _socket.BeginSend(obfsBuffer, 0, obfsSendSize, 0, callback, st);
-            }
-            return obfsSendSize;
-        }
-
-        public int EndSend(IAsyncResult ar)
-        {
-            return _socket.EndSend(ar);
+            return SendAll(obfsBuffer, obfsSendSize, 0);
         }
 
         public IAsyncResult BeginReceiveFrom(byte[] buffer, int size, SocketFlags flags, ref EndPoint ep, AsyncCallback callback, object state)
@@ -1052,12 +1072,12 @@ namespace Shadowsocks.Controller
             //构造Socks5代理服务器第一连接头(无用户名密码)
             byte[] bySock5Send = new Byte[10];
             bySock5Send[0] = 5;
-            bySock5Send[1] = 2;
+            bySock5Send[1] = (socks5RemoteUsername.Length == 0 ? (byte)1 : (byte)2);
             bySock5Send[2] = 0;
             bySock5Send[3] = 2;
 
             //发送Socks5代理第一次连接信息
-            _socket.Send(bySock5Send, 4, SocketFlags.None);
+            SendAll(bySock5Send, 2 + bySock5Send[1], SocketFlags.None);
 
             byte[] bySock5Receive = new byte[32];
             int iRecCount = _socket.Receive(bySock5Receive, bySock5Receive.Length, SocketFlags.None);
@@ -1097,7 +1117,7 @@ namespace Shadowsocks.Controller
                         {
                             bySock5Send[socks5RemoteUsername.Length + 3 + i] = (Byte)socks5RemotePassword[i];
                         }
-                        _socket.Send(bySock5Send, bySock5Send.Length, SocketFlags.None);
+                        SendAll(bySock5Send, bySock5Send.Length, SocketFlags.None);
                         iRecCount = _socket.Receive(bySock5Receive, bySock5Receive.Length, SocketFlags.None);
 
                         if (bySock5Receive[0] != 1 || bySock5Receive[1] != 0)
@@ -1174,7 +1194,7 @@ namespace Shadowsocks.Controller
                 dataSock5Send.Add((byte)(iRemotePort / 256));
                 dataSock5Send.Add((byte)(iRemotePort % 256));
 
-                _socket.Send(dataSock5Send.ToArray(), dataSock5Send.Count, SocketFlags.None);
+                SendAll(dataSock5Send.ToArray(), dataSock5Send.Count, SocketFlags.None);
                 iRecCount = _socket.Receive(bySock5Receive, bySock5Receive.Length, SocketFlags.None);
 
                 if (iRecCount < 2 || bySock5Receive[0] != 5 || bySock5Receive[1] != 0)
@@ -1215,7 +1235,7 @@ namespace Shadowsocks.Controller
                 dataSock5Send.Add((byte)(0));
                 dataSock5Send.Add((byte)(0));
 
-                _socket.Send(dataSock5Send.ToArray(), dataSock5Send.Count, SocketFlags.None);
+                SendAll(dataSock5Send.ToArray(), dataSock5Send.Count, SocketFlags.None);
                 iRecCount = _socket.Receive(bySock5Receive, bySock5Receive.Length, SocketFlags.None);
 
                 if (bySock5Receive[0] != 5 || bySock5Receive[1] != 0)
@@ -1298,14 +1318,14 @@ namespace Shadowsocks.Controller
             string authstr = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(socks5RemoteUsername + ":" + socks5RemotePassword));
             string cmd = "CONNECT " + host + " HTTP/1.0\r\n"
                 + "Host: " + host + "\r\n";
-            if (proxyUserAgent != null && proxyUserAgent.Length > 0)
+            if (!string.IsNullOrEmpty(proxyUserAgent))
                 cmd += "User-Agent: " + proxyUserAgent + "\r\n";
             cmd += "Proxy-Connection: Keep-Alive\r\n";
             if (socks5RemoteUsername.Length > 0)
                 cmd += "Proxy-Authorization: Basic " + authstr + "\r\n";
             cmd += "\r\n";
             byte[] httpData = System.Text.Encoding.UTF8.GetBytes(cmd);
-            _socket.Send(httpData, httpData.Length, SocketFlags.None);
+            SendAll(httpData, httpData.Length, SocketFlags.None);
             byte[] byReceive = new byte[1024];
             int iRecCount = _socket.Receive(byReceive, byReceive.Length, SocketFlags.None);
             if (iRecCount > 13)

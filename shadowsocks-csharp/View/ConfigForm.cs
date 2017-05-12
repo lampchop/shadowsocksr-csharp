@@ -23,6 +23,8 @@ namespace Shadowsocks.View
         // this is a copy of configuration that we are working on
         private Configuration _modifiedConfiguration;
         private int _oldSelectedIndex = -1;
+        private bool _allowSave = true;
+        private bool _ignoreLoad = false;
         private string _oldSelectedID = null;
 
         private string _SelectedID = null;
@@ -114,6 +116,8 @@ namespace Shadowsocks.View
                 SetServerListSelectedIndex(focusIndex);
                 LoadSelectedServer();
             }
+
+            UpdateServersListBoxTopIndex();
         }
 
         private Font CreateFont()
@@ -326,7 +330,7 @@ namespace Shadowsocks.View
                 NumUDPPort.Value = server.server_udp_port;
                 PasswordTextBox.Text = server.password;
                 EncryptionSelect.Text = server.method ?? "aes-256-cfb";
-                if (server.protocol == null || server.protocol.Length == 0)
+                if (string.IsNullOrEmpty(server.protocol))
                 {
                     TCPProtocolComboBox.Text = "origin";
                 }
@@ -368,11 +372,12 @@ namespace Shadowsocks.View
                     checkAdvSetting.Checked = true;
                 }
 
-                PasswordLabel.Checked = false;
+                //PasswordLabel.Checked = false;
+                //IPLabel.Checked = false;
                 Update_SSR_controls_Visable();
                 UpdateObfsTextbox();
+                TextLink.SelectAll();
                 GenQR(TextLink.Text);
-                //IPTextBox.Focus();
             }
             else
             {
@@ -387,13 +392,13 @@ namespace Shadowsocks.View
                 ServersListBox.Items.Clear();
                 foreach (Server server in _modifiedConfiguration.configs)
                 {
-                    if (server.group != null && server.group.Length > 0)
+                    if (!string.IsNullOrEmpty(server.group))
                     {
-                        ServersListBox.Items.Add(server.group + " - " + server.FriendlyName());
+                        ServersListBox.Items.Add(server.group + " - " + server.HiddenName());
                     }
                     else
                     {
-                        ServersListBox.Items.Add("      " + server.FriendlyName());
+                        ServersListBox.Items.Add("      " + server.HiddenName());
                     }
                 }
             }
@@ -401,40 +406,31 @@ namespace Shadowsocks.View
             {
                 for (int i = 0; i < _modifiedConfiguration.configs.Count; ++i)
                 {
-                    if (_modifiedConfiguration.configs[i].group != null && _modifiedConfiguration.configs[i].group.Length > 0)
+                    if (!string.IsNullOrEmpty(_modifiedConfiguration.configs[i].group))
                     {
-                        ServersListBox.Items[i] = _modifiedConfiguration.configs[i].group + " - " + _modifiedConfiguration.configs[i].FriendlyName();
+                        ServersListBox.Items[i] = _modifiedConfiguration.configs[i].group + " - " + _modifiedConfiguration.configs[i].HiddenName();
                     }
                     else
                     {
-                        ServersListBox.Items[i] = "      " + _modifiedConfiguration.configs[i].FriendlyName();
+                        ServersListBox.Items[i] = "      " + _modifiedConfiguration.configs[i].HiddenName();
                     }
                 }
             }
         }
 
-        private void SetServerListSelectedIndex(int index)
+        public void SetServerListSelectedIndex(int index)
         {
-            int oldSelectedIndex = _oldSelectedIndex;
-            int selIndex = Math.Min(index + 5, ServersListBox.Items.Count - 1);
-            if (selIndex != index)
-            {
-                _oldSelectedIndex = selIndex;
-                ServersListBox.SelectedIndex = selIndex;
-                _oldSelectedIndex = oldSelectedIndex;
-                ServersListBox.SelectedIndex = index;
-            }
-            else
-            {
-                ServersListBox.SelectedIndex = index;
-            }
+            ServersListBox.ClearSelected();
+            ServersListBox.SelectedIndex = index;
         }
 
         private void LoadCurrentConfiguration()
         {
             _modifiedConfiguration = controller.GetConfiguration();
             LoadConfiguration(_modifiedConfiguration);
+            _allowSave = false;
             SetServerListSelectedIndex(_modifiedConfiguration.index);
+            _allowSave = true;
             LoadSelectedServer();
         }
 
@@ -445,18 +441,38 @@ namespace Shadowsocks.View
                 // we are moving back to oldSelectedIndex or doing a force move
                 return;
             }
-            int change = SaveOldSelectedServer();
-            if (change == -1)
+            if (_allowSave)
             {
-                ServersListBox.SelectedIndex = _oldSelectedIndex; // go back
-                return;
+                int change = SaveOldSelectedServer();
+                if (change == -1)
+                {
+                    ServersListBox.SelectedIndex = _oldSelectedIndex; // go back
+                    return;
+                }
+                if (change == 1)
+                {
+                    LoadConfiguration(_modifiedConfiguration);
+                }
             }
-            if (change == 1)
-            {
-                LoadConfiguration(_modifiedConfiguration);
-            }
-            LoadSelectedServer();
+            if (!_ignoreLoad) LoadSelectedServer();
             _oldSelectedIndex = ServersListBox.SelectedIndex;
+        }
+
+        private void UpdateServersListBoxTopIndex(int style = 0)
+        {
+            int visibleItems = ServersListBox.ClientSize.Height / ServersListBox.ItemHeight;
+            int index;
+            if (style == 0)
+            {
+                index = ServersListBox.SelectedIndex;
+            }
+            else
+            {
+                var items = ServersListBox.SelectedIndices;
+                index = (style == 1 ? items[0] : items[items.Count - 1]);
+            }
+            int topIndex = Math.Max(index - visibleItems / 2, 0);
+            ServersListBox.TopIndex = topIndex;
         }
 
         private void AddButton_Click(object sender, EventArgs e)
@@ -468,7 +484,7 @@ namespace Shadowsocks.View
             Server server = _oldSelectedIndex >=0 && _oldSelectedIndex < _modifiedConfiguration.configs.Count
                 ? Configuration.CopyServer(_modifiedConfiguration.configs[_oldSelectedIndex])
                 : Configuration.GetDefaultServer();
-            _modifiedConfiguration.configs.Insert(_oldSelectedIndex < 0 ? 0 : _oldSelectedIndex, server);
+            _modifiedConfiguration.configs.Insert(_oldSelectedIndex < 0 ? 0 : _oldSelectedIndex + 1, server);
             LoadConfiguration(_modifiedConfiguration);
             _SelectedID = server.id;
             ServersListBox.SelectedIndex = _oldSelectedIndex + 1;
@@ -491,6 +507,7 @@ namespace Shadowsocks.View
             LoadConfiguration(_modifiedConfiguration);
             SetServerListSelectedIndex(_oldSelectedIndex);
             LoadSelectedServer();
+            UpdateServersListBoxTopIndex();
         }
 
         private void OKButton_Click(object sender, EventArgs e)
@@ -539,15 +556,49 @@ namespace Shadowsocks.View
             _oldSelectedIndex = ServersListBox.SelectedIndex;
             int index = _oldSelectedIndex;
             SaveOldSelectedServer();
-            if (index > 0 && index < _modifiedConfiguration.configs.Count)
+            var items = ServersListBox.SelectedIndices;
+            if (items.Count == 1)
             {
-                _modifiedConfiguration.configs.Reverse(index - 1, 2);
-                _oldSelectedIndex = index - 1;
-                ServersListBox.SelectedIndex = index - 1;
+                if (index > 0 && index < _modifiedConfiguration.configs.Count)
+                {
+                    _modifiedConfiguration.configs.Reverse(index - 1, 2);
+                    ServersListBox.ClearSelected();
+                    ServersListBox.SelectedIndex = _oldSelectedIndex = index - 1;
+                    LoadConfiguration(_modifiedConfiguration);
+                    ServersListBox.ClearSelected();
+                    ServersListBox.SelectedIndex = _oldSelectedIndex = index - 1;
+                    LoadSelectedServer();
+                }
+            }
+            else
+            {
+                List<int> all_items = new List<int>();
+                foreach (int item in items)
+                {
+                    if (item == 0)
+                        return;
+                    all_items.Add(item);
+                }
+                foreach (int item in all_items)
+                {
+                    _modifiedConfiguration.configs.Reverse(item - 1, 2);
+                }
+                _allowSave = false;
+                _ignoreLoad = true;
+                ServersListBox.SelectedIndex = _oldSelectedIndex = index - 1;
                 LoadConfiguration(_modifiedConfiguration);
-                ServersListBox.SelectedIndex = _oldSelectedIndex;
+                ServersListBox.ClearSelected();
+                foreach (int item in all_items)
+                {
+                    if (item != index)
+                        ServersListBox.SelectedIndex = _oldSelectedIndex = item - 1;
+                }
+                ServersListBox.SelectedIndex = _oldSelectedIndex = index - 1;
+                _ignoreLoad = false;
+                _allowSave = true;
                 LoadSelectedServer();
             }
+            UpdateServersListBoxTopIndex(1);
         }
 
         private void DownButton_Click(object sender, EventArgs e)
@@ -555,15 +606,50 @@ namespace Shadowsocks.View
             _oldSelectedIndex = ServersListBox.SelectedIndex;
             int index = _oldSelectedIndex;
             SaveOldSelectedServer();
-            if (_oldSelectedIndex >= 0 && _oldSelectedIndex < _modifiedConfiguration.configs.Count - 1)
+            var items = ServersListBox.SelectedIndices;
+            if (items.Count == 1)
             {
-                _modifiedConfiguration.configs.Reverse(index, 2);
-                _oldSelectedIndex = index + 1;
-                ServersListBox.SelectedIndex = index + 1;
+                if (_oldSelectedIndex >= 0 && _oldSelectedIndex < _modifiedConfiguration.configs.Count - 1)
+                {
+                    _modifiedConfiguration.configs.Reverse(index, 2);
+                    ServersListBox.ClearSelected();
+                    ServersListBox.SelectedIndex = _oldSelectedIndex = index + 1;
+                    LoadConfiguration(_modifiedConfiguration);
+                    ServersListBox.ClearSelected();
+                    ServersListBox.SelectedIndex = _oldSelectedIndex = index + 1;
+                    LoadSelectedServer();
+                }
+            }
+            else
+            {
+                List<int> rev_items = new List<int>();
+                int max_index = ServersListBox.Items.Count - 1;
+                foreach (int item in items)
+                {
+                    if (item == max_index)
+                        return;
+                    rev_items.Insert(0, item);
+                }
+                foreach (int item in rev_items)
+                {
+                    _modifiedConfiguration.configs.Reverse(item, 2);
+                }
+                _allowSave = false;
+                _ignoreLoad = true;
+                ServersListBox.SelectedIndex = _oldSelectedIndex = index + 1;
                 LoadConfiguration(_modifiedConfiguration);
-                ServersListBox.SelectedIndex = _oldSelectedIndex;
+                ServersListBox.ClearSelected();
+                foreach (int item in rev_items)
+                {
+                    if (item != index)
+                        ServersListBox.SelectedIndex = _oldSelectedIndex = item + 1;
+                }
+                ServersListBox.SelectedIndex = _oldSelectedIndex = index + 1;
+                _ignoreLoad = false;
+                _allowSave = true;
                 LoadSelectedServer();
             }
+            UpdateServersListBoxTopIndex(2);
         }
 
         private void TextBox_Enter(object sender, EventArgs e)
@@ -663,6 +749,18 @@ namespace Shadowsocks.View
                 CheckUDPoverUDP.Visible = false;
             }
             ResumeLayout();
+        }
+
+        private void IPLabel_CheckedChanged(object sender, EventArgs e)
+        {
+            if (IPLabel.Checked)
+            {
+                IPTextBox.UseSystemPasswordChar = false;
+            }
+            else
+            {
+                IPTextBox.UseSystemPasswordChar = true;
+            }
         }
     }
 }

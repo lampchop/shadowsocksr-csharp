@@ -71,6 +71,16 @@ namespace Shadowsocks.Util
             temp.CopyTo(buf, 0);
         }
 
+        public static bool BitCompare(byte[] target, int target_offset, byte[] m, int m_offset, int targetLength)
+        {
+            for (int i = 0; i < targetLength; ++i)
+            {
+                if (target[target_offset + i] != m[m_offset + i])
+                    return false;
+            }
+            return true;
+        }
+
         public static int FindStr(byte[] target, int targetLength, byte[] m)
         {
             if (m.Length > 0 && targetLength >= m.Length)
@@ -274,7 +284,7 @@ namespace Shadowsocks.Util
         {
             IPAddress ret_ipAddress = null;
             {
-                if (dns_servers != null && dns_servers.Length > 0)
+                if (!string.IsNullOrEmpty(dns_servers))
                 {
                     OpenDNS.Types[] types;
                     if (IPv6_first)

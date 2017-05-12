@@ -114,7 +114,7 @@ namespace Shadowsocks.Model
             }
             if (lastUserSelectIndex != curIndex)
             {
-                if (configs.Count > curIndex && curIndex >= 0 && configs[curIndex].isEnable())
+                if (configs.Count > curIndex && curIndex >= 0 && configs[curIndex].isEnable() && algorithm != (int)SelectAlgorithm.Timer)
                 {
                     lastSelectIndex = curIndex;
                 }
@@ -125,8 +125,6 @@ namespace Shadowsocks.Model
                 List<ServerIndex> serverList = new List<ServerIndex>();
                 for (int i = 0; i < configs.Count; ++i)
                 {
-                    if (forceChange && lastSelectIndex == i)
-                        continue;
                     if (configs[i].isEnable())
                     {
                         if (filter != null)
@@ -137,7 +135,16 @@ namespace Shadowsocks.Model
                         serverList.Add(new ServerIndex(i, configs[i]));
                     }
                 }
-                if (forceChange && serverList.Count > 1)
+                if (serverList.Count == 0 && filter != null)
+                {
+                    for (int i = 0; i < configs.Count; ++i)
+                    {
+                        if (!filter(configs[i], lastSelectIndex < 0 ? null : configs[lastSelectIndex]))
+                            continue;
+                        serverList.Add(new ServerIndex(i, configs[i]));
+                    }
+                }
+                if (forceChange && serverList.Count > 1 && algorithm != (int)SelectAlgorithm.OneByOne)
                 {
                     for (int i = 0; i < serverList.Count; ++i)
                     {
@@ -168,14 +175,7 @@ namespace Shadowsocks.Model
                                 break;
                             }
                         }
-                        if (selIndex != -1)
-                        {
-                            serverListIndex = serverList[(selIndex + 1) % serverList.Count].index;
-                        }
-                        else
-                        {
-                            serverListIndex = serverList[0].index;
-                        }
+                        serverListIndex = serverList[(selIndex + 1) % serverList.Count].index;
                     }
                     else if (algorithm == (int)SelectAlgorithm.Random)
                     {
@@ -187,7 +187,7 @@ namespace Shadowsocks.Model
                     {
                         if (algorithm == (int)SelectAlgorithm.Timer)
                         {
-                            if ((DateTime.Now - lastSelectTime).TotalSeconds > 60 * 10)
+                            if ((DateTime.Now - lastSelectTime).TotalSeconds > 60 * 5)
                             {
                                 lastSelectTime = DateTime.Now;
                             }

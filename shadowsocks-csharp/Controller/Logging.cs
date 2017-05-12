@@ -26,6 +26,7 @@ namespace Shadowsocks.Controller
 
         private static FileStream _logFileStream;
         private static StreamWriterWithTimestamp _logStreamWriter;
+        private static object _lock = new object();
 
         public static bool OpenLogFile()
         {
@@ -39,15 +40,16 @@ namespace Shadowsocks.Controller
                 {
                     Directory.CreateDirectory(curpath);
                 }
-                date = DateTime.Now.ToString("yyyy-MM");
-                LogFileName = "shadowsocks_" + date + ".log";
+                string new_date = DateTime.Now.ToString("yyyy-MM");
+                LogFileName = "shadowsocks_" + new_date + ".log";
                 LogFile = Path.Combine(curpath, LogFileName);
                 _logFileStream = new FileStream(LogFile, FileMode.Append);
                 _logStreamWriter = new StreamWriterWithTimestamp(_logFileStream);
                 _logStreamWriter.AutoFlush = true;
                 Console.SetOut(_logStreamWriter);
                 Console.SetError(_logStreamWriter);
-                
+                date = new_date;
+
                 return true;
             }
             catch (IOException e)
@@ -81,6 +83,11 @@ namespace Shadowsocks.Controller
             Log(LogLevel.Error, o);
         }
 
+        public static void Info(object o)
+        {
+            Log(LogLevel.Info, o);
+        }
+
         [Conditional("DEBUG")]
         public static void Debug(object o)
         {
@@ -98,12 +105,23 @@ namespace Shadowsocks.Controller
             return result;
         }
 
-        public static void LogUsefulException(Exception e)
+        protected static void UpdateLogFile()
         {
             if (DateTime.Now.ToString("yyyy-MM") != date)
             {
-                OpenLogFile();
+                lock (_lock)
+                {
+                    if (DateTime.Now.ToString("yyyy-MM") != date)
+                    {
+                        OpenLogFile();
+                    }
+                }
             }
+        }
+
+        public static void LogUsefulException(Exception e)
+        {
+            UpdateLogFile();
             // just log useful exceptions, not all of them
             if (e is SocketException)
             {
@@ -129,6 +147,10 @@ namespace Shadowsocks.Controller
                 {
                     // ignore
                 }
+                else if (se.SocketErrorCode == SocketError.Interrupted)
+                {
+                    // ignore
+                }
                 else
                 {
                     Error(e);
@@ -146,10 +168,7 @@ namespace Shadowsocks.Controller
 
         public static bool LogSocketException(string remarks, string server, Exception e)
         {
-            if (DateTime.Now.ToString("yyyy-MM") != date)
-            {
-                OpenLogFile();
-            }
+            UpdateLogFile();
             // just log useful exceptions, not all of them
             if (e is ObfsException)
             {
@@ -223,6 +242,7 @@ namespace Shadowsocks.Controller
         }
         public static void Log(LogLevel level, object s)
         {
+            UpdateLogFile();
             var strMap = new []{
                 "Debug",
                 "Info",

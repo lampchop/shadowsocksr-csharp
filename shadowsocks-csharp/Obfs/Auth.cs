@@ -45,7 +45,7 @@ namespace Shadowsocks.Obfs
 
         public void PackData(byte[] data, int datalength, byte[] outdata, out int outlength)
         {
-            int rand_len = datalength > 1300 ? 1 : random.Next(64) + 1;
+            int rand_len = datalength > 1300 ? 1 : LinearRandomInt(64) + 1;
             outlength = rand_len + datalength + 6;
             if (datalength > 0)
                 Array.Copy(data, 0, outdata, rand_len + 2, datalength);
@@ -58,7 +58,7 @@ namespace Shadowsocks.Obfs
 
         public void PackAuthData(byte[] data, int datalength, byte[] outdata, out int outlength)
         {
-            int rand_len = random.Next(250) + 1;
+            int rand_len = LinearRandomInt(250) + 1;
             int data_offset = rand_len + 4 + 2;
             outlength = data_offset + datalength + 12 + 10;
             AuthData authData = (AuthData)this.Server.data;
@@ -72,7 +72,7 @@ namespace Shadowsocks.Obfs
                 {
                     authData.clientID = new byte[4];
                     g_random.GetBytes(authData.clientID);
-                    authData.connectionID = (UInt32)random.Next(0x1000000);
+                    authData.connectionID = (UInt32)LinearRandomInt(0x1000000);
                 }
                 authData.connectionID += 1;
                 Array.Copy(authData.clientID, 0, outdata, data_offset + 4, 4);
@@ -102,6 +102,11 @@ namespace Shadowsocks.Obfs
 
         public override byte[] ClientPreEncrypt(byte[] plaindata, int datalength, out int outlength)
         {
+            if (plaindata == null)
+            {
+                outlength = 0;
+                return plaindata;
+            }
             byte[] outdata = new byte[datalength + datalength / 10 + 32];
             byte[] packdata = new byte[9000];
             byte[] data = plaindata;
@@ -110,7 +115,7 @@ namespace Shadowsocks.Obfs
             if (!has_sent_header)
             {
                 int headsize = GetHeadSize(plaindata, 30);
-                int _datalength = Math.Min(random.Next(32) + headsize, datalength);
+                int _datalength = Math.Min(LinearRandomInt(32) + headsize, datalength);
                 int outlen;
                 PackAuthData(data, _datalength, packdata, out outlen);
                 has_sent_header = true;
@@ -227,7 +232,7 @@ namespace Shadowsocks.Obfs
 
         public void PackData(byte[] data, int datalength, byte[] outdata, out int outlength)
         {
-            int rand_len = (datalength >= 1300 ? 0 : (datalength > 400 ? random.Next(128) : random.Next(1024))) + 1;
+            int rand_len = (datalength >= 1300 ? 0 : (datalength > 400 ? LinearRandomInt(128) : LinearRandomInt(1024))) + 1;
             outlength = rand_len + datalength + 6;
             if (datalength > 0)
                 Array.Copy(data, 0, outdata, rand_len + 2, datalength);
@@ -254,7 +259,7 @@ namespace Shadowsocks.Obfs
 
         public void PackAuthData(byte[] data, int datalength, byte[] outdata, out int outlength)
         {
-            int rand_len = (datalength > 400 ? random.Next(128) : random.Next(1024)) + 1;
+            int rand_len = (datalength > 400 ? LinearRandomInt(128) : LinearRandomInt(1024)) + 1;
             int data_offset = rand_len + 4 + 2;
             outlength = data_offset + datalength + 12 + 10;
             AuthData authData = (AuthData)this.Server.data;
@@ -273,7 +278,7 @@ namespace Shadowsocks.Obfs
                 {
                     authData.clientID = new byte[8];
                     g_random.GetBytes(authData.clientID);
-                    authData.connectionID = (UInt32)BitConverter.ToInt64(authData.clientID, 0) % 0xFFFFFD; // random.Next(0x1000000);
+                    authData.connectionID = (UInt32)BitConverter.ToInt64(authData.clientID, 0) % 0xFFFFFD;
                 }
                 authData.connectionID += 1;
                 Array.Copy(authData.clientID, 0, outdata, data_offset, 8);
@@ -313,6 +318,11 @@ namespace Shadowsocks.Obfs
 
         public override byte[] ClientPreEncrypt(byte[] plaindata, int datalength, out int outlength)
         {
+            if (plaindata == null)
+            {
+                outlength = 0;
+                return plaindata;
+            }
             byte[] outdata = new byte[datalength + datalength / 10 + 32];
             byte[] packdata = new byte[9000];
             byte[] data = plaindata;
@@ -322,7 +332,7 @@ namespace Shadowsocks.Obfs
             if (!has_sent_header)
             {
                 int headsize = GetHeadSize(plaindata, 30);
-                int _datalength = Math.Min(random.Next(32) + headsize, datalength);
+                int _datalength = Math.Min(LinearRandomInt(32) + headsize, datalength);
                 int outlen;
                 PackAuthData(data, _datalength, packdata, out outlen);
                 has_sent_header = true;
@@ -422,6 +432,7 @@ namespace Shadowsocks.Obfs
         protected bool has_recv_header;
         protected static RNGCryptoServiceProvider g_random = new RNGCryptoServiceProvider();
         protected const string SALT = "auth_sha1_v4";
+        protected const int overhead = 9;
 
         public static List<string> SupportedObfs()
         {
@@ -448,9 +459,14 @@ namespace Shadowsocks.Obfs
             return true;
         }
 
+        public override int GetOverhead()
+        {
+            return overhead;
+        }
+
         public void PackData(byte[] data, int datalength, byte[] outdata, out int outlength)
         {
-            int rand_len = (datalength > 1200 ? 0 : (datalength > 400 ? random.Next(256) : random.Next(512))) + 1;
+            int rand_len = (datalength > 1200 ? 0 : (datalength > 400 ? LinearRandomInt(256) : LinearRandomInt(512))) + 1;
             outlength = rand_len + datalength + 8;
             if (datalength > 0)
                 Array.Copy(data, 0, outdata, rand_len + 4, datalength);
@@ -479,7 +495,7 @@ namespace Shadowsocks.Obfs
 
         public void PackAuthData(byte[] data, int datalength, byte[] outdata, out int outlength)
         {
-            int rand_len = (datalength > 400 ? random.Next(128) : random.Next(1024)) + 1;
+            int rand_len = (datalength > 400 ? LinearRandomInt(128) : LinearRandomInt(1024)) + 1;
             int data_offset = rand_len + 4 + 2;
             outlength = data_offset + datalength + 12 + 10;
             AuthData authData = (AuthData)this.Server.data;
@@ -498,7 +514,7 @@ namespace Shadowsocks.Obfs
                 {
                     authData.clientID = new byte[4];
                     g_random.GetBytes(authData.clientID);
-                    authData.connectionID = (UInt32)BitConverter.ToInt32(authData.clientID, 0) % 0xFFFFFD; // random.Next(0x1000000);
+                    authData.connectionID = (UInt32)BitConverter.ToInt32(authData.clientID, 0) % 0xFFFFFD;
                 }
                 authData.connectionID += 1;
                 Array.Copy(authData.clientID, 0, outdata, data_offset + 4, 4);
@@ -543,6 +559,11 @@ namespace Shadowsocks.Obfs
 
         public override byte[] ClientPreEncrypt(byte[] plaindata, int datalength, out int outlength)
         {
+            if (plaindata == null)
+            {
+                outlength = 0;
+                return plaindata;
+            }
             byte[] outdata = new byte[datalength + datalength / 10 + 32];
             byte[] packdata = new byte[9000];
             byte[] data = plaindata;
@@ -552,7 +573,7 @@ namespace Shadowsocks.Obfs
             if (!has_sent_header)
             {
                 int headsize = GetHeadSize(plaindata, 30);
-                int _datalength = Math.Min(random.Next(32) + headsize, datalength);
+                int _datalength = Math.Min(LinearRandomInt(32) + headsize, datalength);
                 int outlen;
                 PackAuthData(data, _datalength, packdata, out outlen);
                 has_sent_header = true;
@@ -641,282 +662,14 @@ namespace Shadowsocks.Obfs
         }
     }
 
-    public class AuthAES128 : VerifySimpleBase
-    {
-        public AuthAES128(string method)
-            : base(method)
-        {
-            has_sent_header = false;
-            has_recv_header = false;
-            pack_id = 0;
-            recv_id = 0;
-        }
-        private static Dictionary<string, int[]> _obfs = new Dictionary<string, int[]> {
-            {"auth_aes128", new int[]{1, 0, 1}},
-        };
-
-        protected bool has_sent_header;
-        protected bool has_recv_header;
-        protected static RNGCryptoServiceProvider g_random = new RNGCryptoServiceProvider();
-        protected const string SALT = "auth_aes128";
-
-        protected uint pack_id;
-        protected uint recv_id;
-
-        public static List<string> SupportedObfs()
-        {
-            return new List<string>(_obfs.Keys);
-        }
-
-        public override Dictionary<string, int[]> GetObfs()
-        {
-            return _obfs;
-        }
-
-        public override object InitData()
-        {
-            return new AuthData();
-        }
-
-        public override bool isKeepAlive()
-        {
-            return true;
-        }
-
-        public override bool isAlwaysSendback()
-        {
-            return true;
-        }
-
-        public void PackData(byte[] data, int datalength, byte[] outdata, out int outlength)
-        {
-            int rand_len = (datalength > 1200 ? 0 : pack_id > 4 ? random.Next(32) : (datalength > 400 ? random.Next(128) : random.Next(512))) + 1;
-            outlength = rand_len + datalength + 8;
-            if (datalength > 0)
-                Array.Copy(data, 0, outdata, rand_len + 4, datalength);
-            outdata[0] = (byte)(outlength);
-            outdata[1] = (byte)(outlength >> 8);
-            ulong crc32 = Util.CRC32.CalcCRC32(outdata, 2);
-            BitConverter.GetBytes((ushort)crc32).CopyTo(outdata, 2);
-            {
-                byte[] rnd_data = new byte[rand_len];
-                random.NextBytes(rnd_data);
-                rnd_data.CopyTo(outdata, 4);
-            }
-            if (rand_len < 128)
-            {
-                outdata[4] = (byte)(rand_len);
-            }
-            else
-            {
-                outdata[4] = 0xFF;
-                outdata[5] = (byte)(rand_len);
-                outdata[6] = (byte)(rand_len >> 8);
-            }
-            ulong adler = Util.Adler32.CalcAdler32(outdata, outlength - 4) ^ pack_id;
-            ++pack_id;
-            BitConverter.GetBytes((uint)adler).CopyTo(outdata, outlength - 4);
-        }
-
-        public void PackAuthData(byte[] data, int datalength, byte[] outdata, out int outlength)
-        {
-            int rand_len = (datalength > 400 ? random.Next(512) : random.Next(1024));
-            int data_offset = rand_len + 16 + 10 + 4;
-            outlength = data_offset + datalength + 4;
-            byte[] encrypt = new byte[30];
-            byte[] encrypt_data = new byte[32];
-            AuthData authData = (AuthData)this.Server.data;
-            {
-                byte[] rnd_data = new byte[rand_len];
-                random.NextBytes(rnd_data);
-                rnd_data.CopyTo(outdata, data_offset - rand_len);
-            }
-
-            lock (authData)
-            {
-                if (authData.connectionID > 0xFF000000)
-                {
-                    authData.clientID = null;
-                }
-                if (authData.clientID == null)
-                {
-                    authData.clientID = new byte[4];
-                    g_random.GetBytes(authData.clientID);
-                    authData.connectionID = (UInt32)BitConverter.ToInt32(authData.clientID, 0) % 0xFFFFFD; // random.Next(0x1000000);
-                }
-                authData.connectionID += 1;
-                Array.Copy(authData.clientID, 0, encrypt, 4, 4);
-                Array.Copy(BitConverter.GetBytes(authData.connectionID), 0, encrypt, 8, 4);
-            }
-            UInt64 utc_time_second = (UInt64)Math.Floor(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1, 0, 0, 0)).TotalSeconds);
-            UInt32 utc_time = (UInt32)(utc_time_second);
-            Array.Copy(BitConverter.GetBytes(utc_time), 0, encrypt, 0, 4);
-            encrypt[12] = (byte)(outlength);
-            encrypt[13] = (byte)(outlength >> 8);
-            encrypt[14] = (byte)(rand_len);
-            encrypt[15] = (byte)(rand_len >> 8);
-
-            {
-                byte[] uid = new byte[4];
-                random.NextBytes(uid);
-
-                byte[] encrypt_key = new byte[Server.key.Length + 4];
-                uid.CopyTo(encrypt_key, 0);
-                Server.key.CopyTo(encrypt_key, 4);
-
-                Encryption.IEncryptor encryptor = Encryption.EncryptorFactory.GetEncryptor("aes-128-cbc", System.Convert.ToBase64String(encrypt_key) + SALT);
-                int enc_outlen;
-                encryptor.SetIV(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
-                encryptor.Encrypt(encrypt, 16, encrypt_data, out enc_outlen);
-                encryptor.Dispose();
-                Array.Copy(encrypt_data, 16, encrypt, 4, 16);
-                uid.CopyTo(encrypt, 0);
-            }
-            {
-                byte[] key = new byte[Server.iv.Length + Server.key.Length];
-                Server.iv.CopyTo(key, 0);
-                Server.key.CopyTo(key, Server.iv.Length);
-
-                HMACSHA1 sha1 = new HMACSHA1(key);
-                byte[] sha1data = sha1.ComputeHash(encrypt, 0, 20);
-                Array.Copy(sha1data, 0, encrypt, 20, 10);
-            }
-            encrypt.CopyTo(outdata, 0);
-            Array.Copy(data, 0, outdata, data_offset, datalength);
-
-            ulong adler = Util.Adler32.CalcAdler32(outdata, outlength - 4);
-            BitConverter.GetBytes((uint)adler).CopyTo(outdata, outlength - 4);
-        }
-
-        public override byte[] ClientPreEncrypt(byte[] plaindata, int datalength, out int outlength)
-        {
-            byte[] outdata = new byte[datalength + datalength / 10 + 32];
-            byte[] packdata = new byte[9000];
-            byte[] data = plaindata;
-            outlength = 0;
-            const int unit_len = 8100;
-            int ogn_datalength = datalength;
-            bool first_mark = false;
-            if (!has_sent_header)
-            {
-                first_mark = true;
-                System.Diagnostics.Debug.WriteLine("First len " + datalength.ToString());
-                int _datalength = Math.Min(1200, datalength);
-                int outlen;
-                PackAuthData(data, _datalength, packdata, out outlen);
-                has_sent_header = true;
-                Util.Utils.SetArrayMinSize2(ref outdata, outlength + outlen);
-                Array.Copy(packdata, 0, outdata, outlength, outlen);
-                outlength += outlen;
-                datalength -= _datalength;
-                byte[] newdata = new byte[datalength];
-                Array.Copy(data, _datalength, newdata, 0, newdata.Length);
-                data = newdata;
-            }
-            while (datalength > unit_len)
-            {
-                int outlen;
-                PackData(data, unit_len, packdata, out outlen);
-                Util.Utils.SetArrayMinSize2(ref outdata, outlength + outlen);
-                Array.Copy(packdata, 0, outdata, outlength, outlen);
-                outlength += outlen;
-                datalength -= unit_len;
-                byte[] newdata = new byte[datalength];
-                Array.Copy(data, unit_len, newdata, 0, newdata.Length);
-                data = newdata;
-            }
-            if (datalength > 0 || ogn_datalength == -1)
-            {
-                int outlen;
-                if (ogn_datalength == -1)
-                    datalength = 0;
-                PackData(data, datalength, packdata, out outlen);
-                Util.Utils.SetArrayMinSize2(ref outdata, outlength + outlen);
-                Array.Copy(packdata, 0, outdata, outlength, outlen);
-                outlength += outlen;
-            }
-            if (first_mark)
-                System.Diagnostics.Debug.WriteLine("First outlen " + outlength.ToString());
-            return outdata;
-        }
-
-        public override byte[] ClientPostDecrypt(byte[] plaindata, int datalength, out int outlength)
-        {
-            byte[] outdata = new byte[recv_buf_len + datalength];
-            Array.Copy(plaindata, 0, recv_buf, recv_buf_len, datalength);
-            recv_buf_len += datalength;
-            outlength = 0;
-            while (recv_buf_len > 4)
-            {
-                ulong crc32 = Util.CRC32.CalcCRC32(recv_buf, 2);
-                if ((uint)((recv_buf[3] << 8) | recv_buf[2]) != ((uint)crc32 & 0xffff))
-                {
-                    throw new ObfsException("ClientPostDecrypt data error");
-                }
-                int len = (recv_buf[1] << 8) + recv_buf[0];
-                if (len >= 8192 || len < 8)
-                {
-                    throw new ObfsException("ClientPostDecrypt data error");
-                }
-                if (len > recv_buf_len)
-                    break;
-
-                if (Util.Adler32.CheckAdler32(recv_buf, len, recv_id))
-                {
-                    ++recv_id;
-                    int pos = recv_buf[4];
-                    if (pos < 255)
-                    {
-                        pos += 4;
-                    }
-                    else
-                    {
-                        pos = ((recv_buf[6] << 8) | recv_buf[5]) + 4;
-                    }
-                    int outlen = len - pos - 4;
-                    Util.Utils.SetArrayMinSize2(ref outdata, outlength + outlen);
-                    Array.Copy(recv_buf, pos, outdata, outlength, outlen);
-                    outlength += outlen;
-                    recv_buf_len -= len;
-                    Array.Copy(recv_buf, len, recv_buf, 0, recv_buf_len);
-                }
-                else
-                {
-                    throw new ObfsException("ClientPostDecrypt data uncorrect checksum");
-                }
-            }
-            return outdata;
-        }
-
-        public override byte[] ClientUdpPreEncrypt(byte[] plaindata, int datalength, out int outlength)
-        {
-            byte[] outdata = new byte[datalength + 4];
-            outlength = datalength + 4;
-            Array.Copy(plaindata, 0, outdata, 0, datalength);
-            ulong adler = Util.Adler32.CalcAdler32(outdata, datalength);
-            BitConverter.GetBytes((uint)adler).CopyTo(outdata, datalength);
-            return outdata;
-        }
-
-        public override byte[] ClientUdpPostDecrypt(byte[] plaindata, int datalength, out int outlength)
-        {
-            if (Util.Adler32.CheckAdler32(plaindata, datalength))
-            {
-                outlength = datalength - 4;
-                return plaindata;
-            }
-            outlength = 0;
-            return plaindata;
-        }
-
-        public override void Dispose()
-        {
-        }
-    }
-
     public class AuthAES128SHA1 : VerifySimpleBase
     {
         protected delegate byte[] hash_func(byte[] input);
+
+        protected class AuthDataAes128 : AuthData
+        {
+            public Model.MinSearchTree tree;
+        }
 
         public AuthAES128SHA1(string method)
             : base(method)
@@ -930,6 +683,9 @@ namespace Shadowsocks.Obfs
                 hash = MbedTLS.MD5;
             else
                 hash = MbedTLS.SHA1;
+            byte[] bytes = new byte[4];
+            g_random.GetBytes(bytes);
+            random = new Random(BitConverter.ToInt32(bytes, 0));
         }
         private static Dictionary<string, int[]> _obfs = new Dictionary<string, int[]> {
             {"auth_aes128_md5", new int[]{1, 0, 1}},
@@ -946,6 +702,16 @@ namespace Shadowsocks.Obfs
         protected byte[] user_key;
         protected byte[] user_id;
         protected hash_func hash;
+        protected byte[] send_buffer;
+        protected int last_datalength;
+
+        protected const int overhead = 9; // 2(length) + 2(len-MAC) + 4(data-MAC) + 1(padding)
+        //protected int[] packet_cnt;
+        protected Dictionary<int, long> packet_cnt = new Dictionary<int, long>();
+        //protected int[] packet_mul;
+        protected Model.MinSearchTree tree;
+        protected const int tree_offset = 9;
+        protected DateTime lastSendTime;
 
         public static List<string> SupportedObfs()
         {
@@ -959,7 +725,7 @@ namespace Shadowsocks.Obfs
 
         public override object InitData()
         {
-            return new AuthData();
+            return new AuthDataAes128();
         }
 
         public override bool isKeepAlive()
@@ -972,6 +738,11 @@ namespace Shadowsocks.Obfs
             return true;
         }
 
+        public override int GetOverhead()
+        {
+            return overhead;
+        }
+
         protected MbedTLS.HMAC CreateHMAC(byte[] key)
         {
             if (Method == "auth_aes128_md5")
@@ -981,9 +752,116 @@ namespace Shadowsocks.Obfs
             return null;
         }
 
-        public void PackData(byte[] data, int datalength, byte[] outdata, out int outlength)
+        protected void Sync()
         {
-            int rand_len = (datalength > 1200 ? 0 : pack_id > 4 ? random.Next(32) : (datalength > 900 ? random.Next(128) : random.Next(512))) + 1;
+#if PROTOCOL_STATISTICS
+            if (Server.data != null)
+            {
+                AuthDataAes128 authData = Server.data as AuthDataAes128;
+                lock (authData)
+                {
+                    if (authData.tree != null && packet_cnt != null)
+                    {
+                        authData.tree.Update(packet_cnt);
+                        tree = authData.tree.Clone();
+                    }
+                }
+            }
+#endif
+        }
+
+        // return final size, include dataLengthMax
+        protected int RandomInMin(int dataLengthMin, int dataLengthMax)
+        {
+            dataLengthMin -= tree_offset;
+            dataLengthMax -= tree_offset;
+            int len = tree.RandomFindIndex(dataLengthMin - 1, dataLengthMax, random);
+            tree.Update(len);
+            return len + tree_offset + 1;
+        }
+
+        // real packet size. mapping: 1 => 0
+        protected void AddPacket(int length)
+        {
+#if PROTOCOL_STATISTICS
+            if (length > tree_offset)
+            {
+                length -= 1 + tree_offset;
+                //if (length >= packet_cnt.Length) length = packet_cnt.Length - 1;
+                //packet_cnt[length]++;
+                if (length >= tree.Size) length = tree.Size - 1;
+                if (packet_cnt.ContainsKey(length))
+                {
+                    packet_cnt[length] += 1;
+                }
+                else
+                    packet_cnt[length] = 1;
+            }
+            else
+            {
+                throw new ObfsException("AddPacket size uncorrect");
+            }
+#endif
+        }
+
+        protected void StatisticsInit(AuthDataAes128 authData)
+        {
+#if PROTOCOL_STATISTICS
+            if (authData.tree == null)
+            {
+                authData.tree = new Model.MinSearchTree(Server.tcp_mss - tree_offset);
+                authData.tree.Init();
+            }
+
+            tree = authData.tree.Clone();
+#endif
+        }
+
+        protected int GetRandLen(int datalength, int fulldatalength, bool nopadding)
+        {
+            if (nopadding || fulldatalength >= Server.buffer_size)
+                return 0;
+            int rev_len = Server.tcp_mss - datalength - overhead;
+            if (rev_len <= 0)
+                return 0;
+            if (datalength > 1100)
+                return LinearRandomInt(rev_len);
+            return TrapezoidRandomInt(rev_len, -0.3);
+        }
+
+#if PROTOCOL_STATISTICS
+        // packetlength + padding = real_packetlength
+        // return size of padding, at least 1
+        protected int GenRandLenFull(int packetlength, int fulldatalength, bool nopadding)
+        {
+            if (nopadding || fulldatalength >= Server.buffer_size)
+                return packetlength;
+            if (packetlength >= Server.tcp_mss)
+            {
+                if (packetlength > Server.tcp_mss && packetlength < Server.tcp_mss * 2)
+                {
+                    return packetlength + TrapezoidRandomInt(Server.tcp_mss * 2 - packetlength, -0.3);
+                }
+                return packetlength + TrapezoidRandomInt(32, -0.3);
+            }
+            return RandomInMin(packetlength, Server.tcp_mss - 1);
+        }
+
+        protected int GenRandLen(int packetlength, int maxpacketlength)
+        {
+            return RandomInMin(packetlength, maxpacketlength);
+        }
+#endif
+
+        public void PackData(byte[] data, int datalength, int fulldatalength, byte[] outdata, out int outlength, bool nopadding = false)
+        {
+#if !PROTOCOL_STATISTICS
+            int rand_len = GetRandLen(datalength, fulldatalength, nopadding) + 1;
+#else
+            const int overhead = 8;
+            int rand_len = GenRandLenFull((datalength == 0 ? 1 : datalength) + overhead + 1, fulldatalength, nopadding)
+                - datalength - overhead;
+#endif
             outlength = rand_len + datalength + 8;
             if (datalength > 0)
                 Array.Copy(data, 0, outdata, rand_len + 4, datalength);
@@ -998,8 +876,8 @@ namespace Shadowsocks.Obfs
                 rnd_data.CopyTo(outdata, 4);
             }
 
+            MbedTLS.HMAC sha1 = CreateHMAC(key);
             {
-                MbedTLS.HMAC sha1 = CreateHMAC(key);
                 byte[] sha1data = sha1.ComputeHash(outdata, 0, 2);
                 Array.Copy(sha1data, 0, outdata, 2, 2);
             }
@@ -1015,7 +893,6 @@ namespace Shadowsocks.Obfs
             }
             ++pack_id;
             {
-                MbedTLS.HMAC sha1 = CreateHMAC(key);
                 byte[] sha1data = sha1.ComputeHash(outdata, 0, outlength - 4);
                 Array.Copy(sha1data, 0, outdata, outlength - 4, 4);
             }
@@ -1023,21 +900,10 @@ namespace Shadowsocks.Obfs
 
         public void PackAuthData(byte[] data, int datalength, byte[] outdata, out int outlength)
         {
-            int rand_len = (datalength > 400 ? random.Next(512) : random.Next(1024));
-            int data_offset = rand_len + 16 + 4 + 4 + 7;
-            outlength = data_offset + datalength + 4;
+            const int authhead_len = 7 + 4 + 16 + 4;
+            const int overhead = authhead_len + 4;
             byte[] encrypt = new byte[24];
-            byte[] encrypt_data = new byte[32];
-            byte[] key = new byte[Server.iv.Length + Server.key.Length];
-            Server.iv.CopyTo(key, 0);
-            Server.key.CopyTo(key, Server.iv.Length);
-
-            AuthData authData = (AuthData)this.Server.data;
-            {
-                byte[] rnd_data = new byte[rand_len];
-                random.NextBytes(rnd_data);
-                rnd_data.CopyTo(outdata, data_offset - rand_len);
-            }
+            AuthDataAes128 authData = this.Server.data as AuthDataAes128;
 
             lock (authData)
             {
@@ -1049,12 +915,33 @@ namespace Shadowsocks.Obfs
                 {
                     authData.clientID = new byte[4];
                     g_random.GetBytes(authData.clientID);
-                    authData.connectionID = (UInt32)BitConverter.ToInt32(authData.clientID, 0) % 0xFFFFFD; // random.Next(0x1000000);
+                    authData.connectionID = (UInt32)BitConverter.ToInt32(authData.clientID, 0) % 0xFFFFFD;
                 }
                 authData.connectionID += 1;
                 Array.Copy(authData.clientID, 0, encrypt, 4, 4);
                 Array.Copy(BitConverter.GetBytes(authData.connectionID), 0, encrypt, 8, 4);
+
+                StatisticsInit(authData);
             }
+
+#if !PROTOCOL_STATISTICS
+            int rand_len = TrapezoidRandomInt(Server.tcp_mss - datalength - overhead + 1, -0.3); //(datalength > 400 ? LinearRandomInt(512) : LinearRandomInt(1024));
+#else
+            int rand_len = GenRandLenFull(datalength + overhead, datalength, false) - datalength - overhead;
+#endif
+            int data_offset = rand_len + authhead_len;
+            outlength = data_offset + datalength + 4;
+            byte[] encrypt_data = new byte[32];
+            byte[] key = new byte[Server.iv.Length + Server.key.Length];
+            Server.iv.CopyTo(key, 0);
+            Server.key.CopyTo(key, Server.iv.Length);
+
+            {
+                byte[] rnd_data = new byte[rand_len];
+                random.NextBytes(rnd_data);
+                rnd_data.CopyTo(outdata, data_offset - rand_len);
+            }
+
             UInt64 utc_time_second = (UInt64)Math.Floor(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1, 0, 0, 0)).TotalSeconds);
             UInt32 utc_time = (UInt32)(utc_time_second);
             Array.Copy(BitConverter.GetBytes(utc_time), 0, encrypt, 0, 4);
@@ -1119,19 +1006,52 @@ namespace Shadowsocks.Obfs
             }
         }
 
+        // plaindata == null    try send buffer data, return null if empty buffer
+        // datalength == 0      sendback, return 0
+        // datalength == -1     keepalive
         public override byte[] ClientPreEncrypt(byte[] plaindata, int datalength, out int outlength)
         {
+            DateTime last = lastSendTime;
+            DateTime now = DateTime.Now;
+            lastSendTime = now;
             byte[] outdata = new byte[datalength + datalength / 10 + 32];
             byte[] packdata = new byte[9000];
-            byte[] data = plaindata;
+            byte[] data = plaindata == null ? send_buffer : plaindata;
             outlength = 0;
+            if (data == null)
+            {
+                return null;
+            }
+            else if (data == send_buffer)
+            {
+                datalength = send_buffer.Length;
+                send_buffer = null;
+                Sync();
+                last = now;
+            }
+            else if (send_buffer != null)
+            {
+                if (datalength <= 0)
+                {
+                    return outdata;
+                }
+                else
+                {
+                    Array.Resize(ref send_buffer, send_buffer.Length + datalength);
+                    Array.Copy(data, 0, send_buffer, send_buffer.Length - datalength, datalength);
+                    data = send_buffer;
+                    datalength = send_buffer.Length;
+                    send_buffer = null;
+                }
+            }
             const int unit_len = 8100;
             int ogn_datalength = datalength;
-            bool first_mark = false;
+            if (datalength < 0 || last != null && (now - last).TotalSeconds > 3)
+            {
+                Sync();
+            }
             if (!has_sent_header)
             {
-                first_mark = true;
-                System.Diagnostics.Debug.WriteLine("First len " + datalength.ToString());
                 int _datalength = Math.Min(1200, datalength);
                 int outlen;
                 PackAuthData(data, _datalength, packdata, out outlen);
@@ -1143,11 +1063,53 @@ namespace Shadowsocks.Obfs
                 byte[] newdata = new byte[datalength];
                 Array.Copy(data, _datalength, newdata, 0, newdata.Length);
                 data = newdata;
+
+                send_buffer = data.Length > 0 ? data : null;
+
+                AddPacket(outlength);
+                return outdata;
+            }
+            bool nopadding = false;
+
+#if !PROTOCOL_STATISTICS
+            if (datalength > 120 * 4 && pack_id < 32)
+            {
+                {
+                    int send_len = LinearRandomInt(120 * 16);
+                    if (send_len < datalength)
+                    {
+                        send_len = TrapezoidRandomInt(Math.Min(datalength - 1, Server.tcp_mss - overhead) - 1, -0.3) + 1;  // must less than datalength
+#else
+            if (datalength > 120 * 4 && pack_id < 64 )
+            {
+                int send_len = LinearRandomInt(datalength + 120 * 4);
+                if (send_len < datalength)
+                {
+                    //long min_0 = tree.GetMin(0, 512);
+                    //long min_512 = tree.GetMin(512, tree.Size);
+                    //if (min_0 < min_512)
+                    {
+                        int max_packet_size = Math.Min(datalength - 1 + overhead, Server.tcp_mss); // must less than datalength + overhead
+                        int len = GenRandLen(overhead + 1, max_packet_size) - overhead; // at least 1 byte data
+                        send_len = len;
+#endif
+
+                        send_len = datalength - send_len;
+
+                        if (send_len > 0)
+                        {
+                            send_buffer = new byte[send_len];
+                            Array.Copy(data, datalength - send_len, send_buffer, 0, send_len);
+                            datalength -= send_len;
+                        }
+                        nopadding = true;
+                    }
+                }
             }
             while (datalength > unit_len)
             {
                 int outlen;
-                PackData(data, unit_len, packdata, out outlen);
+                PackData(data, unit_len, ogn_datalength, packdata, out outlen, nopadding);
                 Util.Utils.SetArrayMinSize2(ref outdata, outlength + outlen);
                 Array.Copy(packdata, 0, outdata, outlength, outlen);
                 outlength += outlen;
@@ -1161,13 +1123,14 @@ namespace Shadowsocks.Obfs
                 int outlen;
                 if (ogn_datalength == -1)
                     datalength = 0;
-                PackData(data, datalength, packdata, out outlen);
+                PackData(data, datalength, ogn_datalength, packdata, out outlen, nopadding);
                 Util.Utils.SetArrayMinSize2(ref outdata, outlength + outlen);
                 Array.Copy(packdata, 0, outdata, outlength, outlen);
                 outlength += outlen;
             }
-            if (first_mark)
-                System.Diagnostics.Debug.WriteLine("First outlen " + outlength.ToString());
+            last_datalength = ogn_datalength;
+            if (outlength > 0)
+                AddPacket(outlength);
             return outdata;
         }
 
@@ -1236,9 +1199,9 @@ namespace Shadowsocks.Obfs
         public override byte[] ClientUdpPreEncrypt(byte[] plaindata, int datalength, out int outlength)
         {
             byte[] outdata = new byte[datalength + 8];
-            user_id = new byte[4];
             if (user_key == null)
             {
+                user_id = new byte[4];
                 int index_of_split = Server.param.IndexOf(':');
                 if (index_of_split > 0)
                 {
@@ -1294,6 +1257,19 @@ namespace Shadowsocks.Obfs
 
         public override void Dispose()
         {
+#if PROTOCOL_STATISTICS
+            if (Server != null && Server.data != null && packet_cnt != null)
+            {
+                AuthDataAes128 authData = Server.data as AuthDataAes128;
+                if (authData != null && authData.tree != null)
+                {
+                    lock (authData)
+                    {
+                        authData.tree.Update(packet_cnt);
+                    }
+                }
+            }
+#endif
         }
     }
 }

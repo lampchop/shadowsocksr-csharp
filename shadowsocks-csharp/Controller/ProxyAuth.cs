@@ -51,7 +51,7 @@ namespace Shadowsocks.Controller
             _firstPacket = firstPacket;
             _firstPacketLength = length;
             _connection = socket;
-            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.NoDelay, true);
+            socket.NoDelay = true;
 
             if (_config.GetPortMapCache().ContainsKey(local_port) && _config.GetPortMapCache()[local_port].type == PortMapType.Forward)
             {
@@ -120,7 +120,7 @@ namespace Shadowsocks.Controller
 
                 if (bytesRead > 1)
                 {
-                    if ((!(_config.authUser != null && _config.authUser.Length > 0) || Util.Utils.isMatchSubNet(((IPEndPoint)_connection.RemoteEndPoint).Address, "127.0.0.0/8"))
+                    if ((!string.IsNullOrEmpty(_config.authUser) || Util.Utils.isMatchSubNet(((IPEndPoint)_connection.RemoteEndPoint).Address, "127.0.0.0/8"))
                         && _firstPacket[0] == 4 && _firstPacketLength >= 9)
                     {
                         RspSocks4aHandshakeReceive();
@@ -213,7 +213,8 @@ namespace Shadowsocks.Controller
                 _connection.Send(response);
                 HandshakeAuthReceiveCallback();
             }
-            else if (no_auth)
+            else if (no_auth && (string.IsNullOrEmpty(_config.authUser)
+                || Util.Utils.isMatchSubNet(((IPEndPoint)_connection.RemoteEndPoint).Address, "127.0.0.0/8")))
             {
                 _connection.Send(response);
                 HandshakeReceive2Callback();
@@ -503,11 +504,14 @@ namespace Shadowsocks.Controller
 
         private void Connect()
         {
+            Handler.GetCurrentServer getCurrentServer = delegate (int localPort, ServerSelectStrategy.FilterFunc filter, string targetURI, bool cfgRandom, bool usingRandom, bool forceRandom) { return _config.GetCurrentServer(localPort, filter, targetURI, cfgRandom, usingRandom, forceRandom); };
+            Handler.KeepCurrentServer keepCurrentServer = delegate (int localPort, string targetURI, string id) { _config.KeepCurrentServer(localPort, targetURI, id); };
+
             int local_port = ((IPEndPoint)_connection.LocalEndPoint).Port;
             Handler handler = new Handler();
 
-            handler.getCurrentServer = delegate (ServerSelectStrategy.FilterFunc filter, string targetURI, bool cfgRandom, bool usingRandom, bool forceRandom) { return _config.GetCurrentServer(filter, targetURI, cfgRandom, usingRandom, forceRandom); };
-            handler.keepCurrentServer = delegate (string targetURI, string id) { _config.KeepCurrentServer(targetURI, id); };
+            handler.getCurrentServer = getCurrentServer;
+            handler.keepCurrentServer = keepCurrentServer;
             handler.connection = new ProxySocketTunLocal(_connection);
             handler.connectionUDP = _connectionUDP;
             handler.cfg.reconnectTimesRemain = _config.reconnectTimes;
@@ -526,7 +530,7 @@ namespace Shadowsocks.Controller
             handler.cfg.TTL = _config.TTL;
             handler.cfg.connect_timeout = _config.connect_timeout;
             handler.cfg.autoSwitchOff = _config.autoBan;
-            if (_config.dns_server != null && _config.dns_server.Length > 0)
+            if (!string.IsNullOrEmpty(_config.dns_server))
             {
                 handler.cfg.dns_servers = _config.dns_server;
             }
@@ -539,7 +543,7 @@ namespace Shadowsocks.Controller
                     {
                         handler.select_server = delegate (Server server, Server selServer) { return server.id == cfg.server.id; };
                     }
-                    else if (cfg.id != null && cfg.id.Length > 0)
+                    else if (!string.IsNullOrEmpty(cfg.id))
                     {
                         handler.select_server = delegate (Server server, Server selServer) { return server.group == cfg.id; };
                     }

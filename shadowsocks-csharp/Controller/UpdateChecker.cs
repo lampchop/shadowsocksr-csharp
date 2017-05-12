@@ -13,7 +13,7 @@ namespace Shadowsocks.Controller
 {
     public class UpdateChecker
     {
-        private const string UpdateURL = "https://raw.githubusercontent.com/breakwa11/breakwa11.github.io/master/update/ssr-win-4.0.xml";
+        private const string UpdateURL = "https://breakwa11.github.io/update/ssr-win-4.0.xml";
 
         public string LatestVersionNumber;
         public string LatestVersionURL;
@@ -21,7 +21,7 @@ namespace Shadowsocks.Controller
 
         public const string Name = "ShadowsocksR";
         public const string Copyright = "Copyright © BreakWa11 2017. Fork from Shadowsocks by clowwindy";
-        public const string Version = "4.1.0";
+        public const string Version = "4.2.3";
 #if !_DOTNET_4_0
         public const string NetVer = "2.0";
 #elif !_CONSOLE
@@ -29,7 +29,16 @@ namespace Shadowsocks.Controller
 #else
         public const string NetVer = "";
 #endif
-        public const string FullVersion = Version + "";
+        public const string FullVersion = Version +
+#if DEBUG
+        " Debug";
+#else
+/*
+        " Alpha";
+/*/
+        "";
+//*/
+#endif
 
         private static bool UseProxy = true;
 
@@ -42,7 +51,7 @@ namespace Shadowsocks.Controller
                 if (UseProxy)
                 {
                     WebProxy proxy = new WebProxy(IPAddress.Loopback.ToString(), config.localPort);
-                    if (config.authPass != null && config.authPass.Length > 0)
+                    if (!string.IsNullOrEmpty(config.authPass))
                     {
                         proxy.Credentials = new NetworkCredential(config.authUser, config.authPass);
                     }

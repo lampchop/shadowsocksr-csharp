@@ -110,7 +110,7 @@ namespace Shadowsocks.Model
         public Dictionary<string, string> token = new Dictionary<string, string>();
         public Dictionary<string, PortMapConfig> portMap = new Dictionary<string, PortMapConfig>();
 
-        private ServerSelectStrategy serverStrategy = new ServerSelectStrategy();
+        private Dictionary<int, ServerSelectStrategy> serverStrategyMap = new Dictionary<int, ServerSelectStrategy>();
         private Dictionary<string, UriVisitTime> uri2time = new Dictionary<string, UriVisitTime>();
         private SortedDictionary<UriVisitTime, string> time2uri = new SortedDictionary<UriVisitTime, string>();
         private Dictionary<int, PortMapConfigCache> portMapCache = new Dictionary<int, PortMapConfigCache>();
@@ -129,12 +129,16 @@ namespace Shadowsocks.Model
             return true;
         }
 
-        public bool KeepCurrentServer(string targetAddr, string id)
+        public bool KeepCurrentServer(int localPort, string targetAddr, string id)
         {
             if (sameHostForSameTarget && targetAddr != null)
             {
-                lock (serverStrategy)
+                lock (serverStrategyMap)
                 {
+                    if (!serverStrategyMap.ContainsKey(localPort))
+                        serverStrategyMap[localPort] = new ServerSelectStrategy();
+                    ServerSelectStrategy serverStrategy = serverStrategyMap[localPort];
+
                     if (uri2time.ContainsKey(targetAddr))
                     {
                         UriVisitTime visit = uri2time[targetAddr];
@@ -162,10 +166,14 @@ namespace Shadowsocks.Model
             return false;
         }
 
-        public Server GetCurrentServer(ServerSelectStrategy.FilterFunc filter, string targetAddr = null, bool cfgRandom = false, bool usingRandom = false, bool forceRandom = false)
+        public Server GetCurrentServer(int localPort, ServerSelectStrategy.FilterFunc filter, string targetAddr = null, bool cfgRandom = false, bool usingRandom = false, bool forceRandom = false)
         {
-            lock (serverStrategy)
+            lock (serverStrategyMap)
             {
+                if (!serverStrategyMap.ContainsKey(localPort))
+                    serverStrategyMap[localPort] = new ServerSelectStrategy();
+                ServerSelectStrategy serverStrategy = serverStrategyMap[localPort];
+
                 foreach (KeyValuePair<UriVisitTime, string> p in time2uri)
                 {
                     if ((DateTime.Now - p.Key.visitTime).TotalSeconds < keepVisitTime)
@@ -290,7 +298,7 @@ namespace Shadowsocks.Model
             foreach (Server s in configs)
             {
                 id2server[s.id] = s;
-                if (s.group != null && s.group.Length > 0)
+                if (!string.IsNullOrEmpty(s.group))
                 {
                     server_group[s.group] = 1;
                 }
@@ -322,6 +330,21 @@ namespace Shadowsocks.Model
                     server_port = pm.server_port
                 };
             }
+            lock (serverStrategyMap)
+            {
+                List<int> remove_ports = new List<int>();
+                foreach (KeyValuePair<int, ServerSelectStrategy> pair in serverStrategyMap)
+                {
+                    if (portMapCache.ContainsKey(pair.Key)) continue;
+                    remove_ports.Add(pair.Key);
+                }
+                foreach (int port in remove_ports)
+                {
+                    serverStrategyMap.Remove(port);
+                }
+                if (!portMapCache.ContainsKey(localPort))
+                    serverStrategyMap.Remove(localPort);
+            }
         }
 
         public Dictionary<int, PortMapConfigCache> GetPortMapCache()
@@ -345,7 +368,7 @@ namespace Shadowsocks.Model
             reconnectTimes = 2;
             keepVisitTime = 180;
             connect_timeout = 5;
-            dns_server = "1.2.4.8 53,8.8.8.8 53";
+            dns_server = "";
             configs = new List<Server>()
             {
                 GetDefaultServer()
